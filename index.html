@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#12121f" />
+  <meta name="description" content="Understand English text messages and slang in Haitian Creole, and write replies back in English." />
+  <title>Mesaj — Kreyòl ⇄ English texting helper</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+
+  <header class="app-header">
+    <h1 class="app-title"><span class="flag">🇭🇹</span> Mesaj</h1>
+    <div class="dir-switch" role="tablist" aria-label="Translation direction">
+      <button class="dir-btn is-active" id="dirEnHt" role="tab" aria-selected="true">
+        <strong>Read a message</strong>
+        <small>English → Kreyòl</small>
+      </button>
+      <button class="dir-btn" id="dirHtEn" role="tab" aria-selected="false">
+        <strong>Write a reply</strong>
+        <small>Kreyòl → English</small>
+      </button>
+    </div>
+  </header>
+
+  <main class="app-main">
+
+    <section class="card">
+      <span class="source-chip" id="sourceChip" hidden></span>
+      <label class="card-label" for="inputText" id="inputLabel">Paste the English message you received</label>
+      <textarea id="inputText" class="text-area" rows="4" spellcheck="false"
+                autocorrect="off" autocapitalize="off"
+                placeholder="lol np, wyd rn? omw btw 🔥"></textarea>
+      <div class="row">
+        <button class="btn btn-ghost" id="pasteBtn">Paste</button>
+        <button class="btn btn-ghost" id="clearBtn">Clear</button>
+        <button class="btn btn-primary" id="goBtn">
+          <span class="btn-text" id="goLabel">Tradui</span>
+          <span class="btn-spinner" hidden>…</span>
+        </button>
+      </div>
+      <p class="hint" id="offlineHint" hidden>Offline — showing the slang breakdown only.</p>
+    </section>
+
+    <!-- Primary output -->
+    <section class="card out-card" id="outCard" hidden>
+      <div class="card-label-row">
+        <span class="card-label" id="outLabel">Tradiksyon an</span>
+        <span class="badge" id="outBadge">Kreyòl</span>
+      </div>
+      <div class="out-text" id="outText"></div>
+      <div class="row row-end">
+        <span class="meta" id="outMeta"></span>
+        <!-- The two below appear only inside the Android app. -->
+        <button class="btn btn-ghost" id="shareBtn" hidden>Share</button>
+        <button class="btn btn-accent" id="replaceBtn" hidden>Replace</button>
+        <button class="btn btn-ghost" id="copyBtn">Kopye</button>
+      </div>
+    </section>
+
+    <!-- Slang decoded: always shown, so meaning survives even if MT fails -->
+    <section class="card slang-card" id="slangCard" hidden>
+      <div class="card-label-row">
+        <span class="card-label" id="slangLabel">Slang nan mesaj la</span>
+        <span class="badge badge-soft" id="slangCount"></span>
+      </div>
+      <ul class="slang-list" id="slangList"></ul>
+    </section>
+
+    <!-- What the app changed before translating -->
+    <details class="card details-card" id="stepsCard" hidden>
+      <summary class="summary">What I changed before translating</summary>
+      <div class="steps">
+        <div class="step">
+          <span class="step-title">Plain English</span>
+          <p class="step-body" id="normText"></p>
+        </div>
+        <div class="step" id="normHitsWrap">
+          <span class="step-title">Shorthand rewritten</span>
+          <p class="step-body mono" id="normHits"></p>
+        </div>
+      </div>
+    </details>
+
+    <section class="card error-card" id="errorCard" hidden>
+      <p class="error-text" id="errorText"></p>
+    </section>
+
+    <!-- Dictionary -->
+    <section class="card">
+      <button class="reference-toggle" id="refToggle" aria-expanded="false">
+        Diksyonè slang <span class="toggle-arrow">▾</span>
+      </button>
+      <div id="refBody" hidden>
+        <input type="search" class="ref-search" id="refSearch" placeholder="Chèche… (lol, wyd, ghosted)" />
+        <div class="ref-list" id="refList"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <p class="dedication">for Chrislande &lt;3</p>
+    <p>Translation by <a href="https://mymemory.translated.net" target="_blank" rel="noopener">MyMemory</a></p>
+  </footer>
+</div>
+
+<script src="lexicon.js"></script>
+<script src="translate.js"></script>
+<script src="app.js"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+</script>
+</body>
+</html>
