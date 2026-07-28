@@ -120,24 +120,19 @@ async function run() {
   setBusy(true);
   hideResults();
 
-  // Slang/shorthand handling only makes sense on the English side.
   const englishSide = direction === "en|ht";
-  let toTranslate = raw;
-  let found = [];
-  let counts = [];
+  const prep = prepare(raw, direction);
+  const found = prep.found;
 
-  if (englishSide) {
-    const norm = protectAndNormalize(raw);
-    toTranslate = norm.text;
-    found = norm.found;
-    counts = norm.counts;
+  // Rendered before awaiting the network on purpose: a rate-limited or offline
+  // translation still leaves the slang breakdown on screen.
+  if (prep.norm) {
     renderSlang(found);
-    renderSteps(norm);
+    renderSteps(prep.norm);
   }
 
   try {
-    const { result, final } = await finishTranslate(
-      { toTranslate, found, counts }, direction);
+    const { result, final } = await finishTranslate(prep, direction);
 
     el.outText.textContent = final.text;
     el.outCard.hidden = false;
@@ -158,40 +153,8 @@ async function run() {
   }
 }
 
-function protectAndNormalize(raw) {
-  const n = normalizeText(raw);
-  const p = protectSlang(n.text);
-  return { text: p.text, found: p.found, counts: p.counts, normalized: n.text, hits: n.hits };
-}
-
-/** Everything that happens before the network call. Cheap, synchronous, safe offline. */
-function prepare(raw, dir) {
-  if (dir !== "en|ht") return { toTranslate: raw, found: [], counts: [], norm: null };
-  const norm = protectAndNormalize(raw);
-  return { toTranslate: norm.text, found: norm.found, counts: norm.counts, norm };
-}
-
-/** The network call plus placeholder restoration. Shared by the translator and the inbox. */
-async function finishTranslate(prep, dir) {
-  /*
-   * Nothing but slang left? The dictionary already has the whole answer.
-   * Skipping the round trip makes "lol wtf 💀" instant, costs no quota, and is
-   * more accurate than whatever an MT engine would invent for "smh".
-   */
-  if (dir === "en|ht" && isSlangOnly(prep.toTranslate)) {
-    const final = restoreSlang(prep.toTranslate, prep.found, prep.counts);
-    return {
-      result: { text: final.text, fromCache: false, quality: 100, fromDictionary: true },
-      final
-    };
-  }
-
-  const result = await translate(prep.toTranslate, dir);
-  const final = dir === "en|ht"
-    ? restoreSlang(result.text, prep.found, prep.counts)
-    : { text: result.text, missing: [] };
-  return { result, final };
-}
+/* prepare() and finishTranslate() now live in pipeline.js, shared with the
+ * background notification translator so the two cannot drift apart. */
 
 function buildMeta(result, final) {
   const bits = [];
