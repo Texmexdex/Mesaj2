@@ -11,6 +11,18 @@
   "lang": "ht",
   "dir": "ltr",
   "categories": ["utilities", "productivity", "education"],
+
+  "_comment_share_target": "An installed PWA appears in the Android share sheet just like a native app. This gives back the share route without an APK. It does not help with Google Messages, which keeps Forward in-app, but it works anywhere that exposes a real system share.",
+  "share_target": {
+    "action": "./",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "icons/icon-192.png",

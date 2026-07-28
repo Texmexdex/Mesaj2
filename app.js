@@ -32,11 +32,20 @@ const el = {
   dirEnHt: $("dirEnHt"), dirHtEn: $("dirHtEn"),
   refToggle: $("refToggle"), refBody: $("refBody"),
   refSearch: $("refSearch"), refList: $("refList"),
-  replaceBtn: $("replaceBtn"), shareBtn: $("shareBtn"), sourceChip: $("sourceChip")
+  replaceBtn: $("replaceBtn"), shareBtn: $("shareBtn"), sendBtn: $("sendBtn"),
+  sourceChip: $("sourceChip"),
+  inboxCard: $("inboxCard"), inboxPrompt: $("inboxPrompt"), inboxEnable: $("inboxEnable"),
+  inboxList: $("inboxList"), inboxEmpty: $("inboxEmpty"), inboxRefresh: $("inboxRefresh")
 };
 
 let direction = "en|ht";
 let busy = false;
+
+/**
+ * Who she is replying to, when a reply was started from a text in the inbox.
+ * Set only by startReply(); cleared whenever she switches back to reading.
+ */
+let replyTo = null;
 
 /* ── Direction ────────────────────────────────────────────────────────────── */
 
@@ -77,7 +86,29 @@ function setDirection(dir) {
   el.dirHtEn.classList.toggle("is-active", !enht);
   el.dirEnHt.setAttribute("aria-selected", String(enht));
   el.dirHtEn.setAttribute("aria-selected", String(!enht));
+
+  // Going back to reading abandons any reply in progress.
+  if (enht) replyTo = null;
+
   hideResults();
+}
+
+/**
+ * Start a reply to one of her texts. She writes in Creole; the finished English
+ * goes straight to the SMS app addressed to whoever sent it.
+ */
+function startReply(from) {
+  replyTo = from || null;
+  setDirection("ht|en");
+  replyTo = from || null;            // setDirection cleared it only for en|ht
+  el.input.value = "";
+  hideResults();
+  if (el.sourceChip) {
+    el.sourceChip.textContent = replyTo ? `replying to ${replyTo}` : "writing a reply";
+    el.sourceChip.hidden = false;
+  }
+  el.input.focus();
+  el.input.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 /* ── Main action ──────────────────────────────────────────────────────────── */
@@ -105,14 +136,15 @@ async function run() {
   }
 
   try {
-    const result = await translate(toTranslate, direction);
-    const final = englishSide
-      ? restoreSlang(result.text, found, counts)
-      : { text: result.text, missing: [] };
+    const { result, final } = await finishTranslate(
+      { toTranslate, found, counts }, direction);
 
     el.outText.textContent = final.text;
     el.outCard.hidden = false;
     el.outMeta.textContent = buildMeta(result, final);
+
+    // Offer one-tap send only when this is a reply to a known number.
+    if (NATIVE && replyTo && direction === "ht|en") el.sendBtn.hidden = false;
   } catch (err) {
     if (err.offline && found.length) {
       el.offlineHint.hidden = false;
@@ -132,10 +164,40 @@ function protectAndNormalize(raw) {
   return { text: p.text, found: p.found, counts: p.counts, normalized: n.text, hits: n.hits };
 }
 
+/** Everything that happens before the network call. Cheap, synchronous, safe offline. */
+function prepare(raw, dir) {
+  if (dir !== "en|ht") return { toTranslate: raw, found: [], counts: [], norm: null };
+  const norm = protectAndNormalize(raw);
+  return { toTranslate: norm.text, found: norm.found, counts: norm.counts, norm };
+}
+
+/** The network call plus placeholder restoration. Shared by the translator and the inbox. */
+async function finishTranslate(prep, dir) {
+  /*
+   * Nothing but slang left? The dictionary already has the whole answer.
+   * Skipping the round trip makes "lol wtf 💀" instant, costs no quota, and is
+   * more accurate than whatever an MT engine would invent for "smh".
+   */
+  if (dir === "en|ht" && isSlangOnly(prep.toTranslate)) {
+    const final = restoreSlang(prep.toTranslate, prep.found, prep.counts);
+    return {
+      result: { text: final.text, fromCache: false, quality: 100, fromDictionary: true },
+      final
+    };
+  }
+
+  const result = await translate(prep.toTranslate, dir);
+  const final = dir === "en|ht"
+    ? restoreSlang(result.text, prep.found, prep.counts)
+    : { text: result.text, missing: [] };
+  return { result, final };
+}
+
 function buildMeta(result, final) {
   const bits = [];
-  if (result.fromCache) bits.push("from cache");
-  if (result.quality >= 90) bits.push("human-reviewed match");
+  if (result.fromDictionary) bits.push("from the dictionary — no translation needed");
+  else if (result.fromCache) bits.push("from cache");
+  if (!result.fromDictionary && result.quality >= 90) bits.push("human-reviewed match");
   if (final.missing && final.missing.length) {
     bits.push(`${final.missing.length} slang term${final.missing.length > 1 ? "s" : ""} listed separately`);
   }
@@ -225,6 +287,7 @@ function hideResults() {
   el.stepsCard.hidden = true;
   el.errorCard.hidden = true;
   el.offlineHint.hidden = true;
+  if (el.sendBtn) el.sendBtn.hidden = true;
 }
 
 function showError(msg) {
@@ -313,11 +376,153 @@ window.Mesaj = {
   /** Android reads the finished translation back out through this. */
   getTranslation() {
     return el.outText.textContent || "";
+  },
+
+  /**
+   * Android hands over recent texts read from the system SMS provider.
+   * Called on launch, on resume, and whenever a new text lands while open.
+   * @param {{id:string,from:string,body:string,at:number}[]} list
+   */
+  inbox(list) {
+    el.inboxCard.hidden = false;
+    el.inboxPrompt.hidden = true;
+    el.inboxRefresh.hidden = false;
+
+    let added = 0;
+    for (const m of list || []) {
+      if (!m || !m.id || inboxItems.has(m.id)) continue;
+      inboxItems.set(m.id, { ...m, creole: null, slang: [], state: "pending" });
+      added++;
+    }
+    renderInbox();
+    if (added) translateInboxBacklog();
+  },
+
+  /** READ_SMS not granted — offer the explanation and the button instead. */
+  inboxUnavailable() {
+    el.inboxCard.hidden = false;
+    el.inboxPrompt.hidden = false;
+    el.inboxRefresh.hidden = true;
+    el.inboxList.innerHTML = "";
+    el.inboxEmpty.hidden = true;
   }
 };
 
+/* ── SMS inbox ────────────────────────────────────────────────────────────── *
+ * Messages live in this Map for as long as the page is open and nowhere else.
+ * Nothing is written to localStorage — only the translation cache persists,
+ * and that is keyed by text, exactly as it already was for typed input.
+ */
+const inboxItems = new Map();
+let inboxRunning = false;
+
+/** Translate anything still pending, oldest first, one at a time. */
+async function translateInboxBacklog() {
+  if (inboxRunning) return;
+  inboxRunning = true;
+
+  try {
+    const pending = [...inboxItems.values()]
+      .filter(m => m.state === "pending")
+      .sort((a, b) => a.at - b.at);
+
+    for (const m of pending) {
+      m.state = "working";
+      renderInbox();
+      try {
+        const prep = prepare(m.body, "en|ht");
+        const { final } = await finishTranslate(prep, "en|ht");
+        m.creole = final.text;
+        m.slang  = prep.found;
+        m.state  = "done";
+      } catch (err) {
+        // Quota and connectivity failures affect every remaining message, so
+        // stop rather than firing off a dozen more doomed requests.
+        m.state = "failed";
+        m.error = err.message;
+        renderInbox();
+        break;
+      }
+      renderInbox();
+    }
+  } finally {
+    inboxRunning = false;
+  }
+}
+
+function renderInbox() {
+  const items = [...inboxItems.values()].sort((a, b) => b.at - a.at);
+  el.inboxEmpty.hidden = items.length > 0;
+  el.inboxList.innerHTML = "";
+
+  for (const m of items) {
+    const li = document.createElement("li");
+    li.className = "inbox-item";
+
+    const head = node("div", "inbox-head", "");
+    head.append(node("span", "inbox-from", m.from || "Unknown"),
+                node("span", "inbox-time", formatTime(m.at)));
+    li.append(head);
+
+    if (m.state === "done") {
+      li.append(node("p", "inbox-creole", m.creole));
+    } else if (m.state === "working") {
+      li.append(node("p", "inbox-status", "Ap tradui…"));
+    } else if (m.state === "failed") {
+      li.append(node("p", "inbox-status inbox-failed", m.error || "Pa ka tradui"));
+    } else {
+      li.append(node("p", "inbox-status", "Ap tann…"));
+    }
+
+    li.append(node("p", "inbox-original", m.body));
+
+    if (m.slang && m.slang.length) {
+      const chips = node("div", "inbox-chips", "");
+      for (const s of m.slang) chips.append(node("span", "inbox-chip", `${s.term} = ${s.ht}`));
+      li.append(chips);
+    }
+
+    const actions = node("div", "inbox-actions", "");
+    const replyBtn = node("button", "btn btn-ghost btn-sm", "Reponn");
+    replyBtn.addEventListener("click", (e) => {
+      e.stopPropagation();          // don't also trigger the row's own handler
+      startReply(m.from);
+    });
+    actions.append(replyBtn);
+    li.append(actions);
+
+    // Tapping the row itself loads it into the translator for the full breakdown.
+    li.addEventListener("click", () => {
+      el.input.value = m.body;
+      setDirection("en|ht");
+      run();
+      el.input.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    el.inboxList.appendChild(li);
+  }
+}
+
+function formatTime(ms) {
+  if (!ms) return "";
+  const d = new Date(ms);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 if (NATIVE) {
   document.body.classList.add("is-native");
+
+  el.inboxEnable.addEventListener("click", () => MesajNative.enableSms());
+  el.inboxRefresh.addEventListener("click", () => {
+    for (const m of inboxItems.values()) if (m.state === "failed") m.state = "pending";
+    renderInbox();
+    translateInboxBacklog();
+  });
+  if (!MesajNative.hasSms()) window.Mesaj.inboxUnavailable();
   el.shareBtn.hidden = false;
   // Only offered when the host launched us on an EDITABLE selection.
   if (MesajNative.canReplace()) el.replaceBtn.hidden = false;
@@ -331,7 +536,45 @@ if (NATIVE) {
     const t = el.outText.textContent;
     if (t) MesajNative.replaceSelection(t);   // swaps the text in place, then closes
   });
+
+  el.sendBtn.addEventListener("click", () => {
+    const t = el.outText.textContent;
+    if (t && replyTo) MesajNative.sendSms(replyTo, t);
+  });
+}
+
+/* ── Shared into the installed web app ────────────────────────────────────── *
+ * When Mesaj is added to the home screen, Android treats it as a share target
+ * (see share_target in manifest.json) and launches it with ?text=... — the
+ * same one-tap route the APK gets, with no install warning to click through.
+ */
+function readSharedText() {
+  let params;
+  try { params = new URLSearchParams(location.search); }
+  catch { return null; }
+
+  const shared = [params.get("text"), params.get("title"), params.get("url")]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  if (!shared) return null;
+
+  // Drop the query string so a refresh does not re-translate the old message.
+  try { history.replaceState(null, "", location.pathname); } catch { /* ignore */ }
+  return shared;
 }
 
 setDirection("en|ht");
-if (!NATIVE) el.input.focus();   // avoid the keyboard covering an auto-translated result
+
+const shared = readSharedText();
+if (shared) {
+  el.input.value = shared;
+  setDirection(guessDirection(shared));
+  if (el.sourceChip) {
+    el.sourceChip.textContent = "shared from another app";
+    el.sourceChip.hidden = false;
+  }
+  run();
+} else if (!NATIVE) {
+  el.input.focus();   // avoid the keyboard covering an auto-translated result
+}

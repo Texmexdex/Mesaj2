@@ -30,6 +30,28 @@
 
   <main class="app-main">
 
+    <!-- SMS inbox — Android build only, hidden entirely in the browser -->
+    <section class="card inbox-card" id="inboxCard" hidden>
+      <div class="card-label-row">
+        <span class="card-label">Mesaj ou yo</span>
+        <button class="btn btn-ghost btn-sm" id="inboxRefresh" hidden>↻</button>
+      </div>
+
+      <div id="inboxPrompt" hidden>
+        <p class="inbox-pitch">
+          Mesaj kapab montre tèks ou resevwa yo tradui otomatikman.
+        </p>
+        <p class="inbox-note">
+          Your texts are read from the phone and translated on screen.
+          Mesaj never keeps a copy of them.
+        </p>
+        <button class="btn btn-accent" id="inboxEnable">Montre mesaj mwen yo</button>
+      </div>
+
+      <ul class="inbox-list" id="inboxList"></ul>
+      <p class="hint" id="inboxEmpty" hidden>Pa gen mesaj pou kounye a.</p>
+    </section>
+
     <section class="card">
       <span class="source-chip" id="sourceChip" hidden></span>
       <label class="card-label" for="inputText" id="inputLabel">Paste the English message you received</label>
@@ -59,6 +81,7 @@
         <!-- The two below appear only inside the Android app. -->
         <button class="btn btn-ghost" id="shareBtn" hidden>Share</button>
         <button class="btn btn-accent" id="replaceBtn" hidden>Replace</button>
+        <button class="btn btn-accent" id="sendBtn" hidden>Voye ➤</button>
         <button class="btn btn-ghost" id="copyBtn">Kopye</button>
       </div>
     </section>

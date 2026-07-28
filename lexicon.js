@@ -37,6 +37,7 @@ const NORMALIZE = {
   // pronouns / spelling
   "u": "you",
   "r": "are",      // safe: standalone "r" is never a word in ordinary English
+  "il": "I will",  // "il brb" — not an English word, so unconditional is safe
   "ya": "you",
   "yall": "you all",
   "y'all": "you all",
@@ -53,6 +54,37 @@ const NORMALIZE = {
   "couldve": "could have",
   "shouldve": "should have",
   "wouldve": "would have",
+  // Texting drops apostrophes constantly, and an unrecognised contraction
+  // wrecks the whole clause for the translator. None of these are words.
+  "hes": "he is",
+  "shes": "she is",
+  "theyre": "they are",
+  "youre": "you are",
+  "youve": "you have",
+  "weve": "we have",
+  "theyve": "they have",
+  "youll": "you will",
+  "theyll": "they will",
+  // "hell" and "shell" are NOT here — "hell no" and "the shell" are real
+  // English. They live in NORMALIZE_CONTEXTUAL below, gated on a following verb.
+  "wasnt": "was not",
+  "werent": "were not",
+  "arent": "are not",
+  "hasnt": "has not",
+  "havent": "have not",
+  "hadnt": "had not",
+  "wouldnt": "would not",
+  "couldnt": "could not",
+  "shouldnt": "should not",
+  "thats": "that is",
+  "whats": "what is",
+  "wheres": "where is",
+  "whens": "when is",
+  "hows": "how is",
+  "whos": "who is",
+  "theres": "there is",
+  "heres": "here is",
+  "gotcha": "I understand",
   "gonna": "going to",
   "wanna": "want to",
   "gotta": "have to",
@@ -171,8 +203,60 @@ const NORMALIZE = {
   "rsvp": "please let me know if you are coming"
 };
 
+/* ── 1b. Contraction fixes that need a cue ────────────────────────────────── *
+ * Same principle as CONTEXTUAL below, but the output is English headed for the
+ * translator rather than Creole. "ill be there" is "I'll"; "I feel ill" is not.
+ * VERB is the tell: a contraction of a pronoun + will/would is always followed
+ * by a bare verb, whereas the noun and adjective readings are not.
+ */
+const VERB = "be|go|going|come|call|text|see|try|get|do|bring|meet|let|talk|check" +
+             "|send|take|make|stop|start|wait|stay|head|leave|arrive|drop|pick|ask" +
+             "|tell|show|help|need|want|like|love|say|know|think|keep|hit|swing";
+
+const NORMALIZE_CONTEXTUAL = [
+  { from: "ill",   to: "I will",    before: VERB },              // vs "I feel ill"
+  { from: "hell",  to: "he will",   before: VERB },              // vs "hell no"
+  { from: "shell", to: "she will",  before: VERB },              // vs "a sea shell"
+  { from: "well",  to: "we will",   before: VERB },              // vs "well, okay"
+  { from: "id",    to: "I would",   before: "like|love|want|prefer|rather|say|guess|think|need|hate|appreciate" },
+  { from: "cant",  to: "cannot",    before: VERB },              // already safe, kept for symmetry
+  { from: "wont",  to: "will not",  before: VERB }
+];
+
+/* ── 1c. Cleanup after normalising ────────────────────────────────────────── *
+ * Expanding each token independently can produce English that contradicts
+ * itself. Her real test message did exactly this: "il brb l8r" became
+ * "I will I will be right back later" — a doubled subject and a phrase that
+ * says both "right back" and "later". Fixing the output is more robust than
+ * trying to enumerate every shorthand combination.
+ */
+const CLEANUP = [
+  // "brb l8r" -> "be right back later" contradicts itself.
+  { re: /\bbe right back(?=\s+(?:later|tonight|tomorrow|in\b|after\b|when\b|around\b))/gi,
+    to: "be back" },
+  // Stacked subjects from things like "il brb" or "im gonna".
+  { re: /\bI will\s+I will\b/gi,   to: "I will" },
+  { re: /\bI am\s+I am\b/gi,       to: "I am" },
+  { re: /\bI will\s+I am\b/gi,     to: "I am" },
+  { re: /\bI do not know\s+I do not\b/gi, to: "I do not" },
+  // Collapse whitespace the substitutions may have introduced.
+  { re: /\s{2,}/g, to: " " }
+];
+
 /* ── 2. Unambiguous slang -> Creole (protected from MT) ───────────────────── */
 const SLANG = {
+  /*
+   * "yo" MUST be protected, not left for the translator.
+   *
+   * In Haitian Creole "yo" is the third-person plural pronoun — they, them,
+   * their. An English message opening with "Yo" therefore reads to a Creole
+   * speaker as a stray "they", which is how a real test message came back
+   * sounding like it was about some third person who was never mentioned.
+   * This is the worst class of bug in the whole app: a word that survives
+   * translation intact and means something entirely different on arrival.
+   */
+  "yo":        { ht: "ey",                         en: "hey (greeting)" },
+
   // laughing
   "lol":       { ht: "m ap ri",                    en: "laughing out loud" },
   "lmao":      { ht: "m ap mouri ak ri",           en: "laughing extremely hard" },
@@ -364,19 +448,65 @@ const CONTEXTUAL_RULES = (() => {
 
 const CONTEXTUAL_OK = CONTEXTUAL_RULES.length === CONTEXTUAL.length;
 
+/*
+ * Cue-gated contraction rules, compiled once. Same lookbehind caveat as the
+ * CONTEXTUAL layer: if the engine rejects it, the rule is skipped and the word
+ * goes to the translator untouched rather than being mangled.
+ */
+const NORMALIZE_CONTEXTUAL_RULES = (() => {
+  const rules = [];
+  for (const c of NORMALIZE_CONTEXTUAL) {
+    try {
+      rules.push({
+        ...c,
+        re: new RegExp(
+          `(?<![\\p{L}\\p{N}])${c.from}(?=\\s+(?:${c.before})(?![\\p{L}\\p{N}]))`,
+          "giu")
+      });
+    } catch { /* no lookbehind support */ }
+  }
+  return rules;
+})();
+
 /**
  * Stage 1 — normalise texting spelling into fluent English.
+ *
+ * Three passes, in order:
+ *   a) cue-gated contractions   "ill be there" -> "I will be there"
+ *   b) word-by-word shorthand   "btw" -> "by the way"
+ *   c) cleanup                  "I will I will be right back later"
+ *                                 -> "I will be back later"
+ *
+ * Pass (c) exists because (b) treats every token independently and can emit
+ * English that contradicts itself. See CLEANUP for the real example.
+ *
  * @returns {{ text: string, hits: {from:string,to:string}[] }}
  */
 function normalizeText(input) {
   const hits = [];
-  const text = input.replace(/[A-Za-z][A-Za-z0-9'/]*|\d+[a-z]+/g, (word) => {
+  let text = input;
+
+  // a) contractions that need a following verb to disambiguate
+  for (const rule of NORMALIZE_CONTEXTUAL_RULES) {
+    rule.re.lastIndex = 0;
+    text = text.replace(rule.re, (m) => {
+      hits.push({ from: m, to: rule.to });
+      return rule.to;
+    });
+  }
+
+  // b) plain word-for-word shorthand
+  text = text.replace(/[A-Za-z][A-Za-z0-9'/]*|\d+[a-z]+/g, (word) => {
     const repl = NORMALIZE[word.toLowerCase()];
     if (!repl) return word;
     hits.push({ from: word, to: repl });
     return repl;
   });
-  return { text, hits };
+
+  // c) repair self-contradicting output
+  for (const fix of CLEANUP) text = text.replace(fix.re, fix.to);
+
+  return { text: text.trim(), hits };
 }
 
 /**
@@ -465,6 +595,25 @@ function tidySpacing(s) {
   return s.replace(/\s+([,.!?;:])/g, "$1").replace(/\s{2,}/g, " ").trim();
 }
 
+/**
+ * True when everything left for the translator is placeholders and punctuation
+ * — "lol wtf 💀", "smh", "ngl fr". There is nothing for a machine to translate,
+ * so the dictionary already holds the whole answer.
+ *
+ * Worth checking because it makes the most common short messages instant,
+ * free, and more accurate than a round trip would be: the curated Creole beats
+ * whatever an MT engine invents for "smh".
+ *
+ * @param {string} protectedText output of protectSlang
+ */
+function isSlangOnly(protectedText) {
+  if (!protectedText) return false;
+  const remainder = protectedText
+    .replace(/\[\[\d+\]\]/g, " ")
+    .replace(/[\s.,!?;:…\-–—'"()]/gu, "");
+  return remainder.length === 0;
+}
+
 function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -519,7 +668,8 @@ function getLexiconList() {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    NORMALIZE, SLANG, CONTEXTUAL, CONTEXTUAL_OK,
-    normalizeText, protectSlang, restoreSlang, getLexiconList, guessDirection
+    NORMALIZE, NORMALIZE_CONTEXTUAL, CLEANUP, SLANG, CONTEXTUAL, CONTEXTUAL_OK,
+    normalizeText, protectSlang, restoreSlang, getLexiconList, guessDirection,
+    isSlangOnly
   };
 }

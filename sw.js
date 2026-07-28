@@ -14,7 +14,7 @@
  * Bump CACHE_NAME on every deploy or clients keep the old shell.
  */
 
-const CACHE_NAME = "mesaj-v2";
+const CACHE_NAME = "mesaj-v4";
 
 const SHELL = [
   "./",
