@@ -1,4 +1,4 @@
-# 🇭🇹 Mesaj
+# 🇭🇹 Konprann
 
 A free, installable web app that helps a Haitian Creole speaker **read English
 text messages** — including slang like `lol`, `wyd`, `left me on read`, `ngl` —
@@ -69,12 +69,18 @@ translate "I like your post" as "I tap the heart or thumbs up on a post".
 
 ## Deploy to GitHub Pages
 
-1. Create a repo (e.g. `mesaj`) and upload every file **except** `v1-archive/`
-   and `test/` (harmless to include, just unused in the browser).
+1. Upload every file **except** `v1-archive/` and `test/` (harmless to include,
+   just unused in the browser).
 2. **Settings → Pages → Deploy from a branch → `main` / `(root)` → Save**
-3. Live at `https://YOUR-USERNAME.github.io/mesaj` in about a minute.
+3. Live at `https://YOUR-USERNAME.github.io/YOUR-REPO` in about a minute.
 
 Paths are relative, so it works at the root or in a subfolder with no changes.
+
+> **Two names that must not change, despite the app being renamed:**
+> the **repo name**, because it forms the Pages URL and an installed home-screen
+> icon points at it; and the Android **`applicationId`** (`net.mesaj.app`),
+> because Android treats a changed id as a different app and would force an
+> uninstall. Only the display name moved to Konprann.
 
 ### Install on Android
 

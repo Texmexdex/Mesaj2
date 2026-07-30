@@ -1,6 +1,6 @@
 {
-  "name": "Mesaj — Kreyòl texting helper",
-  "short_name": "Mesaj",
+  "name": "Konprann — Kreyòl texting helper",
+  "short_name": "Konprann",
   "description": "Understand English text messages and slang in Haitian Creole, and write replies back in English.",
   "start_url": "./",
   "scope": "./",

@@ -379,15 +379,40 @@ window.Mesaj = {
 const inboxItems = new Map();
 let inboxRunning = false;
 
+/**
+ * Newest first, everywhere. Used for both display order and translation
+ * priority so the two can never disagree.
+ *
+ * Falls back to the SMS row id when timestamps are missing or equal — ids are
+ * monotonic, so they order correctly even if a device's provider hands back a
+ * zero date. Without the guard a NaN comparison silently degrades to insertion
+ * order, which looks like the sort simply not working.
+ */
+function byNewest(a, b) {
+  const at = Number(a.at) || 0;
+  const bt = Number(b.at) || 0;
+  if (bt !== at) return bt - at;
+  return (Number(b.rowId) || 0) - (Number(a.rowId) || 0);
+}
+
 /** Translate anything still pending, oldest first, one at a time. */
 async function translateInboxBacklog() {
   if (inboxRunning) return;
   inboxRunning = true;
 
   try {
+    /*
+     * NEWEST FIRST — this is a priority order, not a display order.
+     *
+     * Translating oldest-first meant the message at the top of the list, the
+     * one she actually opened the app to read, was translated LAST. It sat on
+     * "Ap tann…" while older messages filled in beneath it. Worse: the loop
+     * stops on the first quota or network failure, so the messages that got
+     * dropped were always the most recent ones.
+     */
     const pending = [...inboxItems.values()]
       .filter(m => m.state === "pending")
-      .sort((a, b) => a.at - b.at);
+      .sort(byNewest);
 
     for (const m of pending) {
       m.state = "working";
@@ -414,7 +439,7 @@ async function translateInboxBacklog() {
 }
 
 function renderInbox() {
-  const items = [...inboxItems.values()].sort((a, b) => b.at - a.at);
+  const items = [...inboxItems.values()].sort(byNewest);
   el.inboxEmpty.hidden = items.length > 0;
   el.inboxList.innerHTML = "";
 
@@ -507,7 +532,7 @@ if (NATIVE) {
 }
 
 /* ── Shared into the installed web app ────────────────────────────────────── *
- * When Mesaj is added to the home screen, Android treats it as a share target
+ * When Konprann is added to the home screen, Android treats it as a share target
  * (see share_target in manifest.json) and launches it with ?text=... — the
  * same one-tap route the APK gets, with no install warning to click through.
  */

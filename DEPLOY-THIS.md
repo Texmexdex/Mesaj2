@@ -1,14 +1,19 @@
-# Mesaj — GitHub Pages bundle
+# Konprann — GitHub Pages bundle
 
 The complete hosted site. Upload the contents of this folder to a repo and turn
 on Pages — there is no build step, no bundler and nothing to install.
 
 ## Deploy
 
-1. Create a repo (e.g. `mesaj`) and upload **everything in this folder**,
-   keeping `icons/` as a folder.
+1. Upload **everything in this folder** to your repo, keeping `icons/` as a
+   folder.
 2. **Settings → Pages → Deploy from a branch → `main` / `(root)` → Save**
-3. Live at `https://YOUR-USERNAME.github.io/mesaj` in about a minute.
+3. Live at `https://YOUR-USERNAME.github.io/YOUR-REPO` in about a minute.
+
+> **Don't rename the repo to match the app.** The app is called Konprann now,
+> but the repo name is baked into the GitHub Pages URL. Renaming it changes
+> that URL, which breaks the icon anyone has already added to their home
+> screen. Display name and repo name are unrelated — leave the repo alone.
 
 All paths are relative, so it works at the domain root or in a subfolder with
 no changes.
