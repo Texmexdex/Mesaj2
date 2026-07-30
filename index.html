@@ -52,6 +52,34 @@
       <p class="hint" id="inboxEmpty" hidden>Pa gen mesaj pou kounye a.</p>
     </section>
 
+    <!--
+      Notification access — Android build only.
+
+      Deliberately a separate card from the SMS inbox. The SMS reader cannot see
+      RCS at all, so someone whose conversations have been upgraded gets an
+      inbox full of verification codes and reasonably concludes the app is
+      broken. This card is the only place that explains why.
+    -->
+    <section class="card listener-card" id="listenerCard" hidden>
+      <span class="card-label">Mesaj RCS yo</span>
+
+      <div id="listenerPrompt" hidden>
+        <p class="inbox-pitch">
+          Google Messages voye mesaj moun ou konnen yo sou RCS, epi Konprann pa
+          ka wè yo konsa.
+        </p>
+        <p class="inbox-note">
+          Turning on notification access lets Konprann translate messages from
+          Google Messages however they arrive, including RCS chats the SMS
+          reader cannot see. Android has no way to grant this for one app only,
+          so Konprann reads Messages and nothing else, and keeps no copy.
+        </p>
+        <button class="btn btn-accent" id="listenerEnable">Aktive aksè a notifikasyon</button>
+      </div>
+
+      <p class="hint" id="listenerOn" hidden>Aksè a notifikasyon aktive ✓</p>
+    </section>
+
     <section class="card">
       <span class="source-chip" id="sourceChip" hidden></span>
       <label class="card-label" for="inputText" id="inputLabel">Paste the English message you received</label>

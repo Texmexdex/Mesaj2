@@ -35,7 +35,9 @@ const el = {
   replaceBtn: $("replaceBtn"), shareBtn: $("shareBtn"), sendBtn: $("sendBtn"),
   sourceChip: $("sourceChip"),
   inboxCard: $("inboxCard"), inboxPrompt: $("inboxPrompt"), inboxEnable: $("inboxEnable"),
-  inboxList: $("inboxList"), inboxEmpty: $("inboxEmpty"), inboxRefresh: $("inboxRefresh")
+  inboxList: $("inboxList"), inboxEmpty: $("inboxEmpty"), inboxRefresh: $("inboxRefresh"),
+  listenerCard: $("listenerCard"), listenerPrompt: $("listenerPrompt"),
+  listenerEnable: $("listenerEnable"), listenerOn: $("listenerOn")
 };
 
 let direction = "en|ht";
@@ -368,6 +370,19 @@ window.Mesaj = {
     el.inboxRefresh.hidden = true;
     el.inboxList.innerHTML = "";
     el.inboxEmpty.hidden = true;
+  },
+
+  /**
+   * Android reports whether notification access is on. Pushed on page load and
+   * again on every resume, because granting it produces no callback at all —
+   * she leaves for a Settings screen and comes back, and re-reading the state
+   * is the only way this card ever updates.
+   * @param {boolean} on
+   */
+  listenerState(on) {
+    el.listenerCard.hidden = false;
+    el.listenerPrompt.hidden = !!on;
+    el.listenerOn.hidden = !on;
   }
 };
 
@@ -511,6 +526,17 @@ if (NATIVE) {
     translateInboxBacklog();
   });
   if (!MesajNative.hasSms()) window.Mesaj.inboxUnavailable();
+
+  /*
+   * hasListener/enableListener were added in 1.6.0. Guard on their presence so
+   * a newer web bundle running inside an older APK shell degrades to hiding the
+   * card rather than throwing on an undefined method and taking the rest of
+   * this block — Share, Replace, Voye — down with it.
+   */
+  if (typeof MesajNative.hasListener === "function") {
+    el.listenerEnable.addEventListener("click", () => MesajNative.enableListener());
+    window.Mesaj.listenerState(MesajNative.hasListener());
+  }
   el.shareBtn.hidden = false;
   // Only offered when the host launched us on an EDITABLE selection.
   if (MesajNative.canReplace()) el.replaceBtn.hidden = false;
